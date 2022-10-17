@@ -1,0 +1,3 @@
+C'est du côté du N que la clé étrangère va se trouver
+QBE = Queries by exemples
+|><| = jointure

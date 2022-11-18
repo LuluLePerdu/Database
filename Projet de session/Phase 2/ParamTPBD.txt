@@ -1,0 +1,4 @@
+RequêteA : Nom_Equipe = ProGamer
+debut:2022-10-06 , fin : 2022-10-10 = ETS, E3, OVERWATCH, R6, CSGO, Rocket
+
+Athletes(CodesAthlete) -> ResultatAthl(ResultatAthlRang) -> Manche(CodeManche) -> Competitions(CodeCompet) -> Jeux(CodeJeux) -> Championnats(ChampJeux)

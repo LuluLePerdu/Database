@@ -1,5 +1,17 @@
 # Révision
 
+Pour les aeliers : 
+- 2 : Bd, schéma et rôles
+- 3 : Héritage et partionnage
+- 4 : PGSQL procedure / fonction
+- 5 : Déclencheur / trigger
+- 6 : Curseur et transactions
+- 7 : Analyse
+
+
+
+
+
 ## Terminologie
 
  * BD: Base de données, collection organisée de données entreposé et accédés de manière électronique
@@ -1830,5 +1842,1391 @@ DROP TRIGGER IF EXISTS nom_du_trigger ON nom_de_la_table
 
 
 
+# Atelier :
+
+# Atelier 2 - BD, schéma et rôles
+
+## Numéro 1
+
+Remettre les requêtes SQL qui créent les objets suivants:
+
+ * BD atelier2
+ * Schéma finances et hr
+ * Table finances.produits (id, nom, prix, quantité)
+ * Table hr.employe (id, nom, prenom, no_employe, salaire, date_embauche)
+ * Ajouter quelques enregistrements dans les 2 tables
+ * Rôle (groupe): employe_finances
+ * Rôles (utilisateurs): gerant_finances et michel
+
+## Numéro 2
+
+Remettre les requêtes SQL qui donnent les droits minimals pour faire les actions suivantes. Inclure aussi des tests sur les droits.
+
+ * gerant_finances:
+   * Propriétaire du schéma finances, il peut créer des tables dans ce schéma
+   * Il ne doit pas voir le schéma hr
+   * Propriétaire de la table produits
+
+ * employe_finances:
+   * Peut faire des SELECT sur la table finances.produits
+   * Peut faire un UPDATE seulement sur le champ quantité de la table finances.produits
+
+ * michel:
+   * Ne peut rien faire c'est triste
+   * L'ajouter dans le groupe employe_finances, il peut maintenant modifier les quantités
+   * Il ne doit pouvoir rien faire d'autres que consulter les produits et modifier les quantités
+
+   ----------
+```sql
+CREATE DATABASE Atelier_2;
+CREATE SCHEMA IF NOT EXISTS finances;
+CREATE SCHEMA IF NOT EXISTS hr;
+
+CREATE TABLE IF NOT EXISTS finances.produits(
+	id SERIAL PRIMARY KEY,
+	nom VARCHAR(255) NOT NULL,
+	prix FLOAT4 NOT NULL,
+	quantite INT NOT NULL
+	);
 
 
+CREATE TABLE IF NOT EXISTS hr.employe(
+	id SERIAL PRIMARY KEY,
+	nom VARCHAR(255) NOT NULL,
+	prenom VARCHAR(255) NOT NULL,
+	no_employe INT NOT NULL,
+	salaire FLOAT4 NOT NULL,
+	date_embauche DATE DEFAULT CURRENT_DATE
+);
+
+INSERT INTO finances.produits (nom, prix, quantite) VALUES
+('Lave-vaiselle', 699.99, 2),
+('Casserole', 9.99, 5),
+('Compétent', 123.12, 0);
+
+INSERT INTO hr.employe(nom, prenom, no_employe,salaire, date_embauche) VALUES
+('Haut-Drré','Bah Rihz', 1, 0.50, '2023-08-20'),
+('Yannick', 'Nault', 2, 15.89, '2022-08-07');
+
+CREATE ROLE employe_finances;
+CREATE ROLE gerant_finances WITH LOGIN PASSWORD 'admin';
+CREATE ROLE michel WITH LOGIN PASSWORD 'admin';
+
+ALTER SCHEMA finances OWNER TO gerant_finances;
+ALTER TABLE finances.produits OWNER TO gerant_finances;
+GRANT CREATE ON SCHEMA finances TO gerant_finances;
+
+GRANT SELECT, UPDATE(quantite) ON finances.produits TO employe_finances; 
+
+ALTER GROUP employe_finances ADD USER michel;
+
+
+
+
+--TEST
+
+--Michel :
+CREATE TABLE test(
+id SERIAL FOREIGN KEY,
+nom TEXT);
+
+SELECT * FROM finances.produits;
+UPDATE finances.produits SET (quantite = 2);
+UPDATE finances.produits SET (nom = 'test'); 
+
+
+--gerant_finance
+
+CREATE TABLE test(
+id SERIAL FOREIGN KEY,
+nom TEXT);
+
+SELECT * FROM finances.produits;
+UPDATE finances.produits SET (quantite = 2);
+UPDATE finances.produits SET (nom = 'test'); 
+
+--employe_finance
+
+CREATE TABLE test(
+id SERIAL FOREIGN KEY,
+nom TEXT);
+
+SELECT * FROM hr.employe;
+CREATE TABLE test(
+id SERIAL FOREIGN KEY,
+nom TEXT);
+
+SELECT * FROM finances.produits;
+UPDATE finances.produits SET (nom = 'test'); 
+```
+-----------
+
+# Atelier 3 - Héritage et partitionnage
+
+## Numéro 1
+
+Créez les tables suivantes:
+
+ * produits (id, nom, prix)
+ * disque_dur (hérite de produit, ssd, vitesse)
+ * carte_graphique (hérite de produit, memoire)
+
+Faites des INSERT sur les 3 tables et des select pour chaque table.
+
+Faites un SELECT de produits qui spécifie aussi la catégorie de produit et les spécificités.
+
+## Numéro 2
+
+Créez la table suivante:
+
+ * utilisateurs (id, nom_utilisateur, mot_de_passe, date_de_creation, etat)
+
+L'état peut être (validez avec un CHECK): 'A_CONFIRME', 'ACTIF', 'BANNIS'.
+
+Créez une partition par état, puis insérez au moins 2 enregistrements par partition.
+
+Avec un UPDATE, banissez un utilisateur actif puis vérifier que le compte a bien bougé de table.
+
+## Numéro 3
+
+Avec vos tables et enregistrements du numéro 1:
+
+ * Faire la moyenne de prix des produits
+ * Sortir la moyenne de prix des produits par catégories (disque_dur et carte_graphique) en utilisant seulement la table `produits`
+ * Idem que le point précédent, mais sans utiliser la table `produits`
+
+
+ ------------
+ ```sql
+
+ CREATE TABLE IF NOT EXISTS produits  (
+	id SERIAL PRIMARY KEY,
+	nom VARCHAR(255) NOT NULL,
+	prix FLOAT4 NOT NULL
+);
+SELECT * FROM produits;
+
+CREATE TABLE IF NOT EXISTS disque_dur (
+	ssd BOOL NOT NULL,
+	vitesse INT NOT NULL
+) INHERITS (produits);
+
+INSERT INTO disque_dur(nom, prix, ssd, vitesse) VALUES
+('Ordi du cégep', 12345.77, 'true', 777),
+('Legion 16po', 2344.99, 'true', 666),
+('Dell XPS 15', 2780, 'true', 777),
+('PC', 123, 'false', 321);
+
+SELECT * FROM disque_dur;
+
+
+CREATE TABLE IF NOT EXISTS carte_graphique (
+	memoire INT NOT NULL
+) INHERITS (produits);
+
+INSERT INTO carte_graphique(nom, prix, memoire) VALUES
+('Esport', 666.66, 32),
+('Legion 12po', 2344.99, 16),
+('Dell XPS 13', 2780, 32),
+('PC-2', 123, 12);
+
+SELECT * FROM carte_graphique;
+
+SELECT 'disque_dur' AS categ, *, NULL as memoire FROM disque_dur
+	UNION
+SELECT 'carte_graphique' AS categ, id, nom, prix, NULL, NULL, memoire FROM carte_graphique
+	UNION
+SELECT 'produits' AS categ, *, NULL, NULL, NULL FROM produits;
+
+
+-- Numéro 2
+
+CREATE TABLE IF NOT EXISTS utilisateurs(
+	id SERIAL,
+	nom_utilisateur VARCHAR(255) NOT NULL,
+	mot_de_passe TEXT NOT NULL,
+	date_de_creation DATE DEFAULT CURRENT_DATE,
+	etat VARCHAR(255) NOT NULL CHECK ((etat = 'A_CONFIRME') OR (etat = 'ACTIF') OR (etat = 'BANNIS')),
+	PRIMARY KEY (id, etat)
+) PARTITION BY LIST (etat);
+
+CREATE TABLE utilisateurs_etat_A_CONFIRME PARTITION OF utilisateurs
+	FOR VALUES IN ('A_CONFIRME');
+CREATE TABLE utilisateurs_etat_ACTIF PARTITION OF utilisateurs
+	FOR VALUES IN ('ACTIF');
+CREATE TABLE utilisateurs_etat_BANNIS PARTITION OF utilisateurs
+	FOR VALUES IN ('BANNIS');
+	
+INSERT INTO utilisateurs(nom_utilisateur, mot_de_passe, date_de_creation,etat) VALUES
+('admin', 'admin', '2023-08-29', 'ACTIF'),
+('LuluLePerdu', '123', '2023-08-21', 'ACTIF'),
+('Yannick', 'chat', '2023-09-01', 'A_CONFIRME'),
+('Mathis', 'Citron', '2023-08-02', 'A_CONFIRME'),
+('Audrey', 'Costco', '2023-07-19', 'BANNIS'),
+('Michel', 'linux', '2023-08-29', 'BANNIS');
+
+
+SELECT * FROM utilisateurs_etat_A_CONFIRME;
+SELECT * FROM utilisateurs_etat_ACTIF;
+SELECT * FROM utilisateurs_etat_BANNIS;
+
+UPDATE utilisateurs SET etat = 'BANNIS' WHERE nom_utilisateur = 'LuluLePerdu';
+SELECT * FROM utilisateurs_etat_ACTIF;
+SELECT * FROM utilisateurs_etat_BANNIS;
+
+
+-- Numéro 3
+
+SELECT AVG(prix) FROM produits;
+SELECT p.relname, AVG(c.prix) FROM produits c, pg_class p WHERE c.tableoid = p.oid GROUP BY (p.relname);
+SELECT 'carte_graphique' AS categ, AVG(prix) FROM carte_graphique GROUP BY categ UNION SELECT 'disque_dur' AS categ, AVG(prix) FROM disque_dur GROUP BY categ;
+
+```
+
+---------------
+
+# Atelier 4 - PGSQL
+
+Pour chaque numéro, remettre le code qui crée la procédure ou fonction PGSQL pour le problème donné, ainsi que des codes de tests.
+
+## Numéro 1
+
+Fonction/procédure "initialiser".
+
+Créer les tables:
+
+ * produits (id, nom, quantite, prix)
+ * transactions (id, quantite, produit_id, moment)
+ * ventes (hérite de transactions)
+ * achats (hérite de transactions)
+ * ajustements (hérite de transactions)
+
+Pour une transaction, le moment doit être "maintenant" par défaut.
+
+Ajoutez aussi quelques produits.
+
+## Numéro 2
+
+Fonction/procédure "ajuster_quantite".
+
+Prend un id de produit et une quantité en paramètre. Ajoute la transaction à la table ajustements et met à jour l'enregistrement correspondant de la table produit.
+
+Si le produit n'existe pas, affichez un message personnalisé dans la console (le produit avec l'id 42 n'existe pas).
+
+## Numéro 3
+
+Fonction/procédure "ajouter_transaction".
+
+Prend un id de produit et une quantité en paramètre. Si la quantité est négative, l'ajouter en valeur positive aux achats. Si la quantité est positive, validez qu'il reste assez de produits et si oui, l'ajouter aux ventes.
+
+Si le produit n'existe pas, affichez un message personnalisé dans la console (le produit avec l'id 42 n'existe pas).
+
+Écrire dans la console la quantité restante et mettre à jour l'enregistrement correspondant de la table produit.
+
+## Numéro 4
+
+Fonction/procédure "valeur_inventaire".
+
+Retourne la valeure totale de l'inventaire (somme de quantité * prix de chaque enregistrement). Faites une version en SQL pur et une 2e version en utilisant seulement un SQL simple `SELECT * FROM produits` avec du pgsql.
+
+## Numéro 5
+
+Fonction/procédure "transactions".
+
+Prend un id de produit en paramètre. Retourne toutes les transactions pour le produit demandé, affiche un message si le produit n'existe pas. Le résultat doit être trié en ordre de `moment`, les quantités d'achats doivent être négatifs et les quantités d'ajustements doivent être préfixés de '='.
+
+Faire une deuxième fonction du même nom qui fonctionne de manière similaire, mais prend en paramètre une date de début et de fin. Retourne toutes les transactions pour tous les produits entre les dates données.
+
+Faire une troisième fonction du même nom qui combine les 2 précédentes: prend en paramètre un id de produit, une date de début et une date de fin.
+
+```sql
+--#1
+CREATE OR REPLACE PROCEDURE initialiser()
+	LANGUAGE PLPGSQL
+AS $$
+BEGIN
+	CREATE TABLE IF NOT EXISTS produits(
+		id SERIAL PRIMARY KEY,
+		nom TEXT,
+		quantite INT,
+		prix FLOAT4
+	);
+	
+	CREATE TABLE IF NOT EXISTS transactions(
+		id SERIAL PRIMARY KEY,
+		quantite INT,
+		produit_id INT,
+		moment TIMESTAMP DEFAULT now(),
+		FOREIGN KEY (produit_id) REFERENCES produits(id)
+	);
+	
+	CREATE TABLE IF NOT EXISTS ventes(
+	)INHERITS (transactions);
+	
+	CREATE TABLE IF NOT EXISTS achats(
+	)INHERITS (transactions);
+	
+	CREATE TABLE IF NOT EXISTS ajustements(
+	)INHERITS (transactions);
+	
+	INSERT INTO produits (nom, quantite, prix) VALUES
+		('Cellulaire', 2, 299.99),
+		('Laptop', 4, 499.99),
+		('Biscuit de la cafet', 30, 15.99),
+		('Ecouteur', 2, 20.99);
+END$$;
+
+CALL initialiser();
+--#2
+
+CREATE OR REPLACE PROCEDURE ajuster_quantite(_id INT, _quantite INT)
+	LANGUAGE PLPGSQL
+AS $$
+BEGIN
+	IF (SELECT _id FROM produits WHERE _id = id) THEN
+		UPDATE produits SET quantite = _quantite WHERE id = _id;
+		INSERT INTO ajustements(quantite, produit_id) VALUES
+			(_quantite, _id);
+	ELSE
+		RAISE NOTICE 'Le produit avec l''id % n''existe pas', _id;
+	END IF;
+END$$;
+
+CALL ajuster_quantite(1,2);
+
+--#3
+
+CREATE OR REPLACE PROCEDURE ajouter_transaction(_id INT, _quantite INT)
+	LANGUAGE PLPGSQL
+AS $$
+BEGIN
+	IF _quantite < 0 THEN
+	_quantite := _quantite * -1
+		INSERT INTO achats (quantite, produit_id) VALUES (_quantite, _id);
+		INSERT INTO ajustements(quantite, produit_id) VALUES
+			(_quantite, _id);
+		RAISE NOTICE 'La qauntité restante est de %', quantite;
+	ELSE
+		RAISE NOTICE 'Le produit avec l''id % n''existe pas', _id;
+	END IF;
+END$$;
+
+CALL ajouter_transaction(1,4);
+--#4
+
+CREATE OR REPLACE PROCEDURE valeur_inventaire()
+	LANGUAGE PLPGSQL
+AS $$
+DECLARE
+item RECORD
+total FLOAT4
+BEGIN
+	FOR item IN SELECT quantite, prix FROM produits
+	LOOP 
+	total := quantite * prix
+	END FOR
+	RAISE NOTICE 'La valeur est de %', total;
+END$$;
+
+--V2
+SELECT SUM (quantite * prix) AS valeur FROM produits;
+
+--#5
+
+CREATE OR REPLACE FUNCTION transactions(product_id INT)
+LANGUAGE plpgsql
+RETURNS TABLE (
+    moment TIMESTAMP,
+    description TEXT
+)
+AS $$
+BEGIN
+    RETURN QUERY
+    SELECT moment,
+           CASE
+               WHEN type = 'achat' THEN '-' || quantity::TEXT
+               WHEN type = 'ajustement' THEN '=' || quantity::TEXT
+           END AS description
+    FROM transactions
+    WHERE product_id = product_id
+    ORDER BY moment;
+    
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'Le produit avec l''ID % n''existe pas', product_id;
+    END IF;
+END;
+$$
+
+CREATE OR REPLACE FUNCTION transactions(start_date DATE, end_date DATE)
+LANGUAGE plpgsql
+RETURNS TABLE (
+    product_id INT,
+    moment TIMESTAMP,
+    description TEXT
+)
+AS $$
+BEGIN
+    RETURN QUERY
+    SELECT product_id,
+           moment,
+           CASE
+               WHEN type = 'achat' THEN '-' || quantity::TEXT
+               WHEN type = 'ajustement' THEN '=' || quantity::TEXT
+           END AS description
+    FROM transactions
+    WHERE moment BETWEEN start_date AND end_date
+    ORDER BY product_id, moment;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION transactions(product_id INT, start_date DATE, end_date DATE)
+LANGUAGE plpgsql
+RETURNS TABLE (
+    moment TIMESTAMP,
+    description TEXT
+)
+AS $$
+BEGIN
+    RETURN QUERY
+    SELECT moment,
+           CASE
+               WHEN type = 'achat' THEN '-' || quantity::TEXT
+               WHEN type = 'ajustement' THEN '=' || quantity::TEXT
+           END AS description
+    FROM transactions
+    WHERE product_id = product_id
+    AND moment BETWEEN start_date AND end_date
+    ORDER BY moment;
+    
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'Le produit avec l''ID % n''existe pas', product_id;
+    END IF;
+END;
+$$;
+```
+
+
+
+--------------
+# Atelier 5 - Déclencheur
+
+## Numéro 1 - a
+
+Créer une procédure qui crée la table suivante (aucune valeur par défaut ni check):
+
+ * produits
+    * id, nom, prix, quantite, creation, mise_a_jour
+    * creation et mise_a_jour sont des timestamp (date avec heure)
+
+## Numéro 1 - b
+
+Faire un Trigger sur le insert qui:
+
+ * Vérifie que le prix et la quantite sont positifs ou zéro
+ * Vérifie que le nom est unique
+ * Met la création à maintenant et la mise à jour à null
+
+Si une des 2 première vérification échoue, annuler le insert avec un message d'erreur clair.
+
+Faire des inserts pour tester les vérifications.
+
+## Numéro 1 - c
+
+Faire un trigger sur le update qui:
+
+ * Met la mise à jour à maintenant
+
+Faire au moins 1 test.
+
+## Numéro 2 - a
+
+Modifiez la table du numéro 1 pour ajouter la colonne `supprime` qui est un timestamp, par défaut à NULL.
+
+Faire un trigger sur le delete et met supprime à maintenant au lieu de supprimer pour vrai.
+
+## Numéro 2 - b
+
+Assurez-vous d'avoir des produits supprimés et des produits "actifs".
+
+Créez les 3 fonctions suivantes:
+
+ * produits_actifs: retourne tous les produits non-supprimés
+ * produits_supprime: retourne tous les produits supprimés
+ * produits_tous: retourne tous les produits (feature tellement inutile)
+
+Testez les 3 fonctions précédentes.
+
+P.S. On appel ce comportement un "Soft Delete", ça permet de supprimer un enregistrement de l'interface sans vraiment perdre les données. Habituellement la colonne de "Soft delete" va être la dernière de la table.
+
+## Numéro 3
+
+Reprendre les tables de l'atelier 4 (produits, transactions, ventes, achats et ajustements) avec quelques produits.
+
+Avec des triggers, lorsque j'insère une vente, un achat ou un ajustement, mettre à jour automatiquement la quantité correspondante dans les produits.
+
+Faire des inserts et des select afin de tester le tout.
+
+## Numéro 4
+
+**Numéro à réviser pour 2024**
+
+Créez la table factures suivante partitionné sur la date:
+
+ * id, no_facture, nom_fournisseur, montant, date
+ * il y aura 1 partition par mois
+
+Créez au moins 1 partition manuellement avec au moins 1 enregistrement.
+
+Créez maintenant un trigger sur le insert qui crée des nouvelles partitions à la volée.
+
+Insérez quelques factures afin de créer dynamiquement les tables.
+```sql
+-- No 1 A
+
+CREATE OR REPLACE PROCEDURE initialiser()
+	LANGUAGE PLPGSQL
+AS $$
+BEGIN
+	CREATE TABLE IF NOT EXISTS produits (
+	id SERIAL PRIMARY KEY,
+	nom VARCHAR(255),
+	prix FLOAT4,
+	quantite INT,
+	creation TIMESTAMP,
+	mise_a_jour TIMESTAMP
+	);
+END; $$
+
+CALL initialiser();
+
+-- No 1 B
+
+CREATE OR REPLACE TRIGGER insert_produits
+    BEFORE INSERT ON produits
+    FOR EACH ROW
+    EXECUTE FUNCTION insert_produits();
+	
+	
+CREATE OR REPLACE FUNCTION insert_produits()
+	RETURNS TRIGGER 
+	LANGUAGE PLPGSQL
+AS $$
+BEGIN
+	IF NEW.prix >= 0 AND NEW.quantite >= 0 AND (SELECT id FROM produits WHERE nom = NEW.nom) IS NULL THEN
+		NEW.creation = NOW()::TIMESTAMP;
+		NEW.mise_a_jour = NULL;
+		RETURN NEW;
+	END IF;
+	RAISE NOTICE 'Rentrez des données valide'
+	RETURN NULL;
+END
+$$;
+
+INSERT INTO produits (nom, prix, quantite) VALUES 
+	('Lulu', 100, 50);
+	
+INSERT INTO produits (nom, prix, quantite) VALUES 
+	('Audrey', 2, -3);
+	
+INSERT INTO produits (nom, prix, quantite) VALUES 
+	('Yannick', -4, 10);
+	
+INSERT INTO produits (nom, prix, quantite) VALUES 
+	('Nathan', 4, 10);
+	
+INSERT INTO produits (nom, prix, quantite) VALUES 
+	('Mathis', 11, 15);
+
+INSERT INTO produits (nom, prix, quantite) VALUES 
+	('Jonathan', 29, 4);
+
+INSERT INTO produits (nom, prix, quantite) VALUES 
+	('Philippe', 6, 150);
+	
+SELECT * FROM produits;
+
+TRUNCATE produits
+
+-- No 1 C
+
+CREATE OR REPLACE TRIGGER update_produits
+    BEFORE UPDATE ON produits
+    FOR EACH ROW
+    EXECUTE FUNCTION update_produits();
+	
+	
+CREATE OR REPLACE FUNCTION update_produits()
+	RETURNS TRIGGER 
+	LANGUAGE PLPGSQL
+AS $$
+BEGIN	
+	NEW.mise_a_jour = NOW()::TIMESTAMP;
+	RETURN NEW;
+END
+$$;
+
+UPDATE produits SET quantite = 51 WHERE id = 9;
+
+-- No 2 A
+
+ALTER TABLE produits ADD supprime TIMESTAMP DEFAULT NULL;
+
+CREATE OR REPLACE TRIGGER delete_produits
+    BEFORE DELETE ON produits
+    FOR EACH ROW
+    EXECUTE FUNCTION delete_produits();
+	
+	
+CREATE OR REPLACE FUNCTION delete_produits()
+	RETURNS TRIGGER 
+	LANGUAGE PLPGSQL
+AS $$
+BEGIN
+	UPDATE produits SET supprime = NOW()::TIMESTAMP WHERE id = OLD.id;
+	RETURN NULL;
+END
+$$;
+
+DELETE FROM produits WHERE nom = 'Nathan';
+DELETE FROM produits WHERE nom = 'Mathis';
+
+-- No 2 B
+
+CREATE OR REPLACE FUNCTION produits_actifs()
+	RETURNS SETOF produits
+	LANGUAGE PLPGSQL
+AS $$
+BEGIN
+	RETURN QUERY SELECT * FROM produits WHERE supprime IS NULL;
+END
+$$;
+
+
+CREATE OR REPLACE FUNCTION produits_supprime()
+	RETURNS SETOF produits
+	LANGUAGE PLPGSQL
+AS $$
+BEGIN
+	RETURN QUERY SELECT * FROM produits WHERE supprime IS NOT NULL;
+END
+$$;
+
+
+CREATE OR REPLACE FUNCTION produits_tous()
+	RETURNS SETOF produits
+	LANGUAGE PLPGSQL
+AS $$
+BEGIN
+	RETURN QUERY SELECT * FROM produits;
+END
+$$;
+
+
+SELECT * FROM produits_actifs();
+SELECT * FROM produits_supprime();
+SELECT * FROM produits_tous();
+
+-- No 3
+
+CREATE OR REPLACE PROCEDURE initialiser()
+	LANGUAGE PLPGSQL
+AS $$
+BEGIN
+	CREATE TABLE IF NOT EXISTS produits2 (
+	id SERIAL PRIMARY KEY,
+	nom VARCHAR(255),
+	quantite INT,
+	prix FLOAT4
+	);
+	
+	CREATE TABLE IF NOT EXISTS transactions (
+	id SERIAL PRIMARY KEY,
+	quantite INT,
+	produit_id INT,
+	moment TIMESTAMP DEFAULT now(),
+	FOREIGN KEY (produit_id) REFERENCES produits2 (id)
+	);
+	
+	CREATE TABLE IF NOT EXISTS ventes (
+	) INHERITS (transactions);
+	
+	CREATE TABLE IF NOT EXISTS achats (
+	) INHERITS (transactions);
+	
+	CREATE TABLE IF NOT EXISTS ajustements (
+	) INHERITS (transactions);
+	
+	IF (SELECT COUNT(*) FROM produits) = 0 THEN
+		INSERT INTO produits (nom, quantite, prix) VALUES
+			('Ordi normal', 100, 500),
+			('Switch reseau', 50, 150),
+			('routeur', 50, 200),
+			('Iphone', 10000, 999);
+	END IF;
+END; $$
+
+CALL initialiser();
+
+SELECT * FROM produits2;
+SELECT * FROM transactions;
+SELECT * FROM achats;
+SELECT * FROM ventes;
+SELECT * FROM ajustements;
+
+
+CREATE OR REPLACE TRIGGER insert_ventes
+    BEFORE INSERT ON ventes
+    FOR EACH ROW
+    EXECUTE FUNCTION insert_ventes();
+	
+	
+CREATE OR REPLACE FUNCTION insert_ventes()
+	RETURNS TRIGGER 
+	LANGUAGE PLPGSQL
+AS $$
+BEGIN
+	UPDATE produits2 SET quantite = quantite - NEW.quantite WHERE id = NEW.produit_id;
+	RETURN NEW;
+END
+$$;
+
+INSERT INTO produits2 (nom, quantite, prix) VALUES ('test', 2, 10);
+INSERT INTO ventes (quantite, produit_id) VALUES (1, 1);
+
+
+
+CREATE OR REPLACE TRIGGER insert_achats
+    BEFORE INSERT ON achats
+    FOR EACH ROW
+    EXECUTE FUNCTION insert_achats();
+	
+	
+CREATE OR REPLACE FUNCTION insert_achats()
+	RETURNS TRIGGER 
+	LANGUAGE PLPGSQL
+AS $$
+BEGIN
+	UPDATE produits2 SET quantite = quantite + NEW.quantite WHERE id = NEW.produit_id;
+	RETURN NEW;
+END
+$$;
+
+INSERT INTO achats (quantite, produit_id) VALUES (1, 1);
+
+
+
+CREATE OR REPLACE TRIGGER insert_ajustements
+    BEFORE INSERT ON ajustements
+    FOR EACH ROW
+    EXECUTE FUNCTION insert_ajustements();
+	
+	
+CREATE OR REPLACE FUNCTION insert_ajustements()
+	RETURNS TRIGGER 
+	LANGUAGE PLPGSQL
+AS $$
+BEGIN
+	UPDATE produits2 SET quantite = NEW.quantite WHERE id = NEW.produit_id;
+	RETURN NEW;
+END
+$$;
+
+INSERT INTO ajustements (quantite, produit_id) VALUES (5, 1);
+```
+
+-----
+
+# Atelier 6 - Curseurs et transactions
+
+## Numéro 1 - a
+
+Créez la table suivante:
+
+ * compte_banque: id, no_compte, nom, balance
+ * balance est un float qui doit être positif (check)
+
+Insérez 2 comptes, avec des balances de 20$ et 100$ (par exemple).
+
+## Numéro 1 - b
+
+Créez une procédure qui:
+
+ * Prend en paramètre 2 ids de compte_banque et le montant
+ * Faites 2 updates, ajoutez l'argent au vendeur puis le retirer de l'acheteur (dans cet ordre)
+ * Ne faites aucune vérification, fiez-vous sur la transaction automatique
+
+ * Essayez de mettre un COMMIT temporairement entre les 2 updates, remarquez la différences "sans transaction"
+
+## Numéro 1 - c
+
+Ajoutez une table transaction: id, compte_in, compte_out, moment, etat.
+etat va contenir "Réussite" ou "Échec".
+
+Retirez le check de la colonne balance.
+
+Créez une procédure qui:
+
+ * Prend en paramètre 2 ids de compte_banque et un montant
+ * Ajoute une transaction avec un état vide
+ * Ajoutez l'argent au vendeur
+ * Vérifie la balance de l'acheteur, si c'est inssufisant faire un rollback
+ * Finalement mettre à jour la transaction pour mettre l'état à "Réussite" ou insérer un "Échec"
+ * Testez avec une réussite et un échec
+
+Indice: vous pouvez avoir l'id inséré avec un CURRVAL (var_id étant une variable, table_id_seq le nom de la séquence du serial):
+
+```pgsql
+var_id := CURRVAL('table_id_seq');
+```
+
+## Numéro 2 - a
+
+Créez la table suivante:
+
+ * stats: id, force, dexterite, endurance, intelligence, sagesse, charisme, niveau
+
+Insérez 50 enregistrements, les colonnes de force à charisme (inclusivement) avec une valeur aléatoire entre 1 et 20.
+
+## Numéro 2 - b
+
+Avec un curseur explicite, parcourir chaque enregistrement. Faites la somme de toutes les stats (de force à charisme).
+
+Selon la somme faire:
+
+ * Moins de 50: Supprimer l'enregistrement
+ * 50 à 59: Mise à jour pour le niveau 1
+ * 60 à 69: Niveau 2
+ * 70 à 79: Niveau 3
+ * 80 et plus: Niveau 4
+
+## Numéro 2 - c
+
+Créez une vue qui représente seulement les stats niveau 4.
+```sql
+--#1 -a
+CREATE TABLE IF NOT EXISTS compte_banque (
+	id INT GENERATED ALWAYS AS IDENTITY,
+	no_compte INTEGER,
+	nom TEXT,
+	balance FLOAT4
+);
+
+INSERT INTO compte_banque(no_compte, nom, balance) VALUES 
+	(111, 'premier_compte', 20),
+	(222, 'second_compte', 100)
+
+
+--#1 - b
+
+CREATE OR REPLACE PROCEDURE virement(id_vendeur INT, id_acheteur INT, montant FLOAT4)
+	LANGUAGE PLPGSQL
+AS $$
+BEGIN
+	UPDATE compte_banque SET balance = balance + montant WHERE id = id_vendeur;
+	COMMIT;
+	UPDATE compte_banque SET balance = balance - montant WHERE id = id_acheteur;
+END$$;
+
+--#1 - c
+
+CREATE TABLE IF NOT EXISTS transactions(
+	id INT GENERATED ALWAYS AS IDENTITY,
+	compte_in INT,
+	compte_out INT,
+	moment TIMESTAMP DEFAULT NOW(),
+	etat VARCHAR(10)
+);
+
+TRUNCATE transactions
+
+INSERT INTO transactions(compte_in, compte_out, moment) VALUES
+(
+1,2,NOW()
+);
+
+CALL effectuer_transaction(1,2,20)
+SELECT * FROM transactions
+SELECT * FROM compte_banque
+
+CREATE OR REPLACE PROCEDURE effectuer_transaction(
+    IN p_compte_in INT,
+    IN p_compte_out INT,
+    IN p_montant FLOAT4
+)
+LANGUAGE PLPGSQL
+AS $$
+DECLARE
+    v_balance_acheteur FLOAT4;
+BEGIN
+    
+    INSERT INTO transactions (compte_in, compte_out, moment, etat)
+    VALUES (p_compte_in, p_compte_out, NOW(), '');
+
+    UPDATE compte_banque
+    SET balance = balance + p_montant
+    WHERE id = p_compte_out;
+
+    SELECT balance INTO v_balance_acheteur
+    FROM compte_banque
+    WHERE id = p_compte_in;
+
+    IF v_balance_acheteur < p_montant THEN
+        UPDATE transactions
+        SET etat = 'Échec'
+        WHERE compte_in = p_compte_in AND compte_out = p_compte_out;
+        ROLLBACK;
+    ELSE
+        UPDATE transactions
+        SET etat = 'Réussite'
+        WHERE compte_in = p_compte_in AND compte_out = p_compte_out;
+        COMMIT;
+    END IF;
+END;
+$$;
+
+
+
+--#2 - a
+
+CREATE TABLE IF NOT EXISTS stats (
+	id INT GENERATED ALWAYS AS IDENTITY,
+	forces INT,
+	dexterite INT,
+	endurance INT,
+	intelligence INT,
+	sagesse INT,
+	charisme INT,
+	niveau INT
+);
+
+
+DO $$
+BEGIN
+   FOR iterator in 1..50 LOOP
+	   INSERT INTO stats(forces, dexterite, endurance, intelligence, sagesse, charisme) VALUES 
+		(trunc(random()*20 + 1),
+		trunc(random()*20 + 1),
+		trunc(random()*20 + 1),
+		trunc(random()*20 + 1),
+		trunc(random()*20 + 1),
+		trunc(random()*20 + 1));
+   END LOOP;
+END
+$$; 
+
+SELECT * FROM stats;
+
+--#2 - b
+
+DO $$
+DECLARE
+	cur CURSOR FOR SELECT * FROM stats;
+BEGIN
+	FOR stats IN cur LOOP
+		IF (stats.forces + stats.dexterite + stats.endurance + stats.intelligence + stats.sagesse + stats.charisme < 50) THEN
+			DELETE FROM stats WHERE CURRENT OF cur;
+		ELSIF ((stats.forces + stats.dexterite + stats.endurance + stats.intelligence + stats.sagesse + stats.charisme) < 60) THEN
+			UPDATE stats SET niveau = 1 WHERE CURRENT OF cur ;
+		ELSIF((stats.forces + stats.dexterite + stats.endurance + stats.intelligence + stats.sagesse + stats.charisme) < 70) THEN
+			UPDATE stats SET niveau = 2 WHERE CURRENT OF cur;
+		ELSIF((stats.forces + stats.dexterite + stats.endurance + stats.intelligence + stats.sagesse + stats.charisme) < 80) THEN
+			UPDATE stats SET niveau = 3 WHERE CURRENT OF cur;
+		ELSIF ((stats.forces + stats.dexterite + stats.endurance + stats.intelligence + stats.sagesse + stats.charisme) >= 80) THEN
+			UPDATE stats SET niveau = 4 WHERE CURRENT OF cur;
+		END IF;
+	END LOOP;
+END
+$$;
+
+SELECT * FROM stats
+
+--#2 - c
+
+CREATE OR REPLACE VIEW niveau_4 AS SELECT * FROM stats WHERE stats.niveau = 4;
+SELECT * FROM niveau_4;
+```
+
+---
+# Numéro 7 - Analyse
+
+## Question 0
+
+Créer les tables suivantes:
+
+ * cours (id, nom, sigle)
+ * prealables (cours_id, prealable_id)
+ * etudiants (id, da, cohorte) -- la cohorte est l'année de graduation
+ * notes (cours_id, etudiant_id, note)
+
+Insérez les cours et préalables suivants:
+
+```sql
+INSERT INTO cours (id, nom, sigle) VALUES
+    (1, 'Système 1', '420-M13'),
+    (2, 'Programmation 1', '420-C17'),
+    (3, 'Rédaction', '420-N15'),
+    (4, 'Math info', '201-T15'),
+    (5, 'Système 2', '420-M24'),
+    (6, 'Programmation 2', '420-C27'),
+    (7, 'Web 1', '420-N26'),
+    (8, 'Interagir dans un contexte professionnel', '401-T24'),
+    (9, 'Réseau 1', '420-M34'),
+    (10, 'Programmation 3', '420-C35'),
+    (11, 'BD1', '420-B35'),
+    (12, 'Modélisation', '420-A33'),
+    (13, 'Soutien technique', '420-M43'),
+    (14, 'Conception', '420-C46'),
+    (15, 'Web 2', '420-N46'),
+    (16, 'Math vectoriel', '201-T45'),
+    (17, 'Réseau 2', '420-M54'),
+    (18, 'Mobile', '420-C56'),
+    (19, 'BD2', '420-B56'),
+    (20, 'Jeux vidéo', '420-G56'),
+    (21, 'Projet mobile', '420-C64'),
+    (22, 'Projet web', '420-N64'),
+    (23, 'Projet d''intégration 1', '420-P64'),
+    (24, 'Stage', '420-P62');
+
+INSERT INTO prealables (cours_id, prealable_id) VALUES
+    (5, 1),
+    (6, 2),
+    (7, 2),
+    (9, 5),
+    (10, 6),
+    (11, 12), --corequis
+    (13, 9),
+    (13, 8),
+    (14, 10),
+    (14, 12),
+    (17, 9),
+    (17, 14),
+    (18, 14),
+    (19, 11),
+    (20, 16),
+    (20, 14),
+    (21, 18),
+    (21, 19),
+    (22, 15),
+    (23, 21),
+    (23, 22),
+    (24, 21),
+    (24, 22),
+    (24, 23);
+```
+
+Créez aléatoirement, entre 20 et 60 étudiants par cohorte pour 10 cohortes.
+
+Pour chaque étudiant, mettre 1 note entre 60 et 100 pour chaque cours.
+
+## Question 1 - a
+
+Faire une seule requête qui, pour tous les étudiants, donne leur percentile.
+
+## Question 1 - b
+
+Faire une seule requête qui, pour tous les étudiants, donne leur rang dans leur cohorte (donc savoir qui est le meilleur de chaque cohorte, le 2e meilleur, etc.).
+
+## Question 2 - a
+
+Faire une seule requête SQL qui donne:
+Pour chaque cohorte:
+
+ * Son année
+ * Sa moyenne
+ * La différence entre cette année et la précédente
+
+## Question 2 - b
+
+Faire la même chose, mais utilisez une table temporaire qui se souvient du "etudiants JOIN notes".
+
+## Question 2 - c
+
+Avec le Explain, trouvez laquelle des 2 solutions précédentes est la plus efficace.
+
+## Question 3 - a
+
+Sans utiliser de SQL récursif (utilisez du PGSQL), donnez le cours "Stage" avec tous ses préalables.
+
+## Question 3 - b
+
+Refaire la même chose mais avec une seule requête SQL (utilisez RECURSIVE).
+
+## Question 3 - c
+
+Avec le EXPLAIN, quelle est la solution la plus efficace?
+
+```sql
+-- Numéro 0
+
+CREATE TABLE cours (
+	id SERIAL PRIMARY KEY,
+	nom TEXT NOT NULL,
+	sigle VARCHAR(7)
+);
+
+CREATE TABLE prealables (
+	cours_id INTEGER REFERENCES cours(id),
+	prealable_id INTEGER REFERENCES cours(id),
+	PRIMARY KEY(cours_id,  prealable_id)
+);
+
+CREATE TABLE etudiants (
+    id SERIAL PRIMARY KEY,
+    da VARCHAR(7) NOT NULL,
+    cohorte INTEGER NOT NULL
+);
+
+CREATE TABLE notes (
+    cours_id INTEGER REFERENCES cours(id),
+    etudiant_id INTEGER REFERENCES etudiants(id),
+    note DECIMAL(5,2),
+	PRIMARY KEY(cours_id, etudiant_id)
+);
+
+INSERT INTO cours (id, nom, sigle) VALUES
+    (1, 'Système 1', '420-M13'),
+    (2, 'Programmation 1', '420-C17'),
+    (3, 'Rédaction', '420-N15'),
+    (4, 'Math info', '201-T15'),
+    (5, 'Système 2', '420-M24'),
+    (6, 'Programmation 2', '420-C27'),
+    (7, 'Web 1', '420-N26'),
+    (8, 'Interagir dans un contexte professionnel', '401-T24'),
+    (9, 'Réseau 1', '420-M34'),
+    (10, 'Programmation 3', '420-C35'),
+    (11, 'BD1', '420-B35'),
+    (12, 'Modélisation', '420-A33'),
+    (13, 'Soutien technique', '420-M43'),
+    (14, 'Conception', '420-C46'),
+    (15, 'Web 2', '420-N46'),
+    (16, 'Math vectoriel', '201-T45'),
+    (17, 'Réseau 2', '420-M54'),
+    (18, 'Mobile', '420-C56'),
+    (19, 'BD2', '420-B56'),
+    (20, 'Jeux vidéo', '420-G56'),
+    (21, 'Projet mobile', '420-C64'),
+    (22, 'Projet web', '420-N64'),
+    (23, 'Projet d''intégration 1', '420-P64'),
+    (24, 'Stage', '420-P62');
+
+INSERT INTO prealables (cours_id, prealable_id) VALUES
+    (5, 1),
+    (6, 2),
+    (7, 2),
+    (9, 5),
+    (10, 6),
+    (11, 12), --corequis
+    (13, 9),
+    (13, 8),
+    (14, 10),
+    (14, 12),
+    (17, 9),
+    (17, 14),
+    (18, 14),
+    (19, 11),
+    (20, 16),
+    (20, 14),
+    (21, 18),
+    (21, 19),
+    (22, 15),
+    (23, 21),
+    (23, 22),
+    (24, 21),
+    (24, 22),
+    (24, 23);
+	
+	
+DO
+$$
+DECLARE
+    etudiant_total INTEGER;
+    quantite_cohort INTEGER := 10;
+BEGIN
+    WHILE quantite_cohort > 0 LOOP
+		quantite_cohort := quantite_cohort - 1;
+        etudiant_total := (RANDOM() * 40 + 20);
+
+        FOR i IN 1..etudiant_total LOOP
+            INSERT INTO etudiants(da, cohorte)
+            VALUES (CAST(CAST((RANDOM() * 7999999 + 1000000) AS INTEGER) AS TEXT),
+					EXTRACT(YEAR FROM CURRENT_DATE) - quantite_cohort);
+        END LOOP;
+    END LOOP;
+END
+$$;
+
+DO
+$$
+DECLARE
+	curs_etudiants CURSOR FOR SELECT * FROM etudiants;
+	etudiant_record RECORD;
+	curs_cours CURSOR FOR SELECT * FROM cours;
+	cours_record RECORD;
+BEGIN
+    OPEN curs_etudiants;
+
+    LOOP
+        FETCH curs_etudiants INTO etudiant_record;
+        EXIT WHEN NOT FOUND;
+		    OPEN curs_cours;
+
+			LOOP
+				FETCH curs_cours INTO cours_record;
+				EXIT WHEN NOT FOUND;
+
+				INSERT INTO notes (cours_id, etudiant_id, note)
+				VALUES (cours_record.id, etudiant_record.id, RANDOM() * 40 + 60);
+			END LOOP;
+			
+        CLOSE curs_cours;
+    END LOOP;
+    
+    CLOSE curs_etudiants;
+END
+$$;
+
+-- Question 1 - a
+
+SELECT
+    etudiant_id,
+    da,
+    cohorte,
+    AVG(note) AS avg_note,
+    PERCENT_RANK() OVER w AS percentile
+FROM 
+    notes
+JOIN 
+    etudiants ON notes.etudiant_id = etudiants.id
+GROUP BY
+    etudiant_id, da, cohorte
+WINDOW w AS (ORDER BY AVG(note))
+ORDER BY
+    avg_note DESC;
+
+-- Question 1 - b
+
+SELECT
+    da,
+    cohorte,
+    AVG(note) AS avg_note,
+    RANK() OVER w AS rang
+FROM 
+    notes
+JOIN 
+    etudiants ON notes.etudiant_id = etudiants.id
+GROUP BY
+    etudiant_id, da, cohorte
+WINDOW w AS (PARTITION BY cohorte ORDER BY AVG(note) DESC)
+ORDER BY 
+    cohorte, rang;
+	
+-- Question 2 - a
+
+EXPLAIN ANALYSE SELECT
+    cohorte,
+    AVG(note) AS moyenne,
+    AVG(note) - LAG(AVG(note)) OVER w AS difference
+FROM
+    etudiants
+JOIN
+    notes ON notes.etudiant_id = etudiants.id
+GROUP BY
+    cohorte
+WINDOW w AS (ORDER BY cohorte);
+
+-- Question 2 - b
+
+CREATE TEMP TABLE temp_table AS
+SELECT
+    etudiants.cohorte,
+    notes.note
+FROM
+    etudiants
+JOIN
+    notes ON notes.etudiant_id = etudiants.id;
+
+EXPLAIN ANALYSE SELECT
+    cohorte,
+    AVG(note) AS moyenne,
+    AVG(note) - LAG(AVG(note)) OVER w AS difference
+FROM
+    temp_table
+GROUP BY
+    cohorte
+WINDOW w AS (ORDER BY cohorte);
+
+-- Numéro 2 - c
+-- a
+--"Planning Time: 0.211 ms"
+--"Execution Time: 3.381 ms"
+
+-- b
+--"Planning Time: 0.055 ms"
+--"Execution Time: 1.387 ms"
+
+-- Le b est beaucoup plus rapide.
+
+-- Numéro 3 - a
+CREATE OR REPLACE FUNCTION fetch_prealables_stage()
+RETURNS TABLE (id INTEGER, nom TEXT)
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    stage_id INT;
+    index_tmp_table INT := 0;
+BEGIN
+    CREATE TEMP TABLE tmp_prealables_stage (id INTEGER, nom TEXT, creation_date TIMESTAMP) ON COMMIT DROP;
+
+    SELECT INTO stage_id cours.id 
+    FROM cours
+    WHERE cours.nom = 'Stage';
+    
+    INSERT INTO tmp_prealables_stage(id, nom, creation_date)
+    VALUES (stage_id, 'Stage', NOW());
+        
+    WHILE index_tmp_table < (SELECT COUNT(*) FROM tmp_prealables_stage) LOOP
+        INSERT INTO tmp_prealables_stage(id, nom)
+        SELECT prealables.prealable_id, cours_prealable.nom
+        FROM prealables 
+        JOIN cours AS cours_prealable ON prealables.prealable_id = cours_prealable.id
+        WHERE prealables.cours_id = (SELECT tmp_prealables_stage.id FROM tmp_prealables_stage
+                                     LIMIT 1 OFFSET index_tmp_table)
+        AND prealables.prealable_id NOT IN (SELECT tmp_prealables_stage.id FROM tmp_prealables_stage);
+
+        index_tmp_table := index_tmp_table + 1;
+    END LOOP;
+
+    RETURN QUERY SELECT tmp_prealables_stage.id, tmp_prealables_stage.nom FROM tmp_prealables_stage;
+END
+$$;
+
+EXPLAIN ANALYSE SELECT * FROM fetch_prealables_stage();
+
+-- Numéro 3 - b
+
+EXPLAIN ANALYSE WITH RECURSIVE prealables_stage AS (
+    SELECT id, nom
+    FROM cours
+    WHERE nom = 'Stage'
+    
+    UNION
+
+    SELECT c.id, c.nom
+    FROM prealables p
+    JOIN cours c ON p.prealable_id = c.id
+    JOIN prealables_stage ps ON p.cours_id = ps.id
+)
+SELECT * FROM prealables_stage;
+
+-- Numéro 3 - c
+-- a
+--"Planning Time: 0.021 ms"
+--"Execution Time: 3.196 ms"
+
+-- b
+--"Planning Time: 0.295 ms"
+--"Execution Time: 0.193 ms"
+
+-- Le b est beaucoup plus rapide.
+
+```

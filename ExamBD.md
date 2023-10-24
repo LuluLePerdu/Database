@@ -1844,6 +1844,119 @@ DROP TRIGGER IF EXISTS nom_du_trigger ON nom_de_la_table
 
 # Atelier :
 
+# Atelier 1 - Contraintes
+
+À faire avant le cours du 1er septembre.
+
+Remettre 1 ou plusieurs fichier SQL qui exécute les requêtes demandés.
+
+## Numéro 1 - Create table
+
+Créez les tables suivantes (vous pouvez renommer les tables/colonnes) avec les contraintes inscrites:
+
+ * Étudiants
+   * id - PK
+   * prénom - max 256 lettres
+   * nom - max 256 lettres
+   * da - 7 lettres exactement
+   * inscription - date et heure, par défaut maintenant
+   * datenaissance - doit avoir au moins 16 ans
+
+ * Cours
+   * id - PK
+   * code - 10 lettres exactements
+   * titre - max 256 lettres
+   * description - aucune limite
+
+ * Session
+   * id - PK
+   * saison - hiver, été ou automne
+   * année - Entre 1998 et l'année suivante inclusivement
+
+ * Inscription
+   * étudiant_id - PK, FK
+   * cours_id - PK, FK
+   * session_id - PK, FK
+   * note - Entre 0 et 100, nullable
+   * réussite - Booléen, doit correspondre à la note, nullable
+
+## Numéro 2 - Tests contraintes
+
+Testez les 11 contraintes du numéro précédents. Donc insérez quelques enregistrements qui fonctionnent, puis ajoutez des enregistrements qui ne fonctionnent pas en brisant 1 champ seulement par requête.
+
+Ça devrait vous faire environ 30 "insert into".
+
+## Numéro 3 - Timezone
+
+Insérez 2 étudiants avec des timezones d'inscriptions différentes.
+
+Affichez les étudiants avec les dates d'inscriptions dans notre timezone. Forcez le choix du timezone dans la requête SELECT.
+
+```sql
+
+CREATE TABLE IF NOT EXISTS etudiants(
+	id SERIAL PRIMARY KEY, 
+	prenom VARCHAR(255) NOT NULL,
+	nom VARCHAR(255) NOT NULL,
+	da VARCHAR(7) NOT NULL CHECK(LENGTH(da) = 7) ,
+	inscription TIMESTAMPTZ DEFAULT (CURRENT_DATE AT TIME ZONE 'utc'),
+	date_naissance TIMESTAMP NOT NULL CHECK(EXTRACT(YEAR FROM AGE(date_naissance)) >= 16)
+);
+
+INSERT INTO etudiants (prenom, nom, da, date_naissance)
+VALUES ('Premier', 'Etudiant', 1234567, '2007-04-26'),
+VALUES ('Erreur', 'Age', 1234560, '2008-04-26'),
+VALUES ('Erreur', 'Da', 123456, '2007-07-07'),
+VALUES ('Phillipe', 'Pasgirard', 1234557, '2007-05-26');
+
+INSERT INTO etudiants (prenom, nom, da, date_naissance, inscription) VALUES
+    ('test', 'testNom', '1234567', '2000-03-15', '2023-08-26 10:00:00+02'),
+    ('Lulu', 'LePerdu', '7654321', '2003-11-25', '2023-08-26 10:00:00-04');
+
+
+CREATE TABLE IF NOT EXISTS cours(
+	id SERIAL PRIMARY KEY,
+	code VARCHAR(10) NOT NULL CHECK(LENGTH(code) = 10),
+	titre VARCHAR(255) NOT NULL,
+	description TEXT NOT NULL
+);
+
+INSERT INTO cours (code, titre, description)
+VALUES ('420B012345', 'Un cours 420', 'Ceci est une description'),
+VALUES ('420B01234', 'Erreur', 'Erreur dans le code');
+
+
+
+
+CREATE TABLE IF NOT EXISTS sessions(
+	id SERIAL PRIMARY KEY,
+	saison TEXT NOT NULL CHECK ((saison = 'hiver') OR (saison = 'été') OR (saison = 'automne')),
+	annee INTEGER CHECK(annee BETWEEN 1998 AND EXTRACT(YEAR FROM NOW()) + 1)
+);
+INSERT INTO sessions (saison, annee)
+VALUES ('hiver', '2023-01-2'),
+VALUES ('été', '2003-02-12'),
+VALUES ('automne', '2024-12-30');
+
+
+CREATE TABLE IF NOT EXISTS inscriptions(
+  etudiant_id INT NOT NULL,
+  cours_id INT NOT NULL,
+	sessions_id INT NOT NULL,
+  PRIMARY KEY (etudiant_id, cours_id, sessions_id),
+  FOREIGN KEY (etudiant_id)
+      REFERENCES etudiants (id),
+  FOREIGN KEY (cours_id)
+      REFERENCES cours (id),
+  FOREIGN KEY (sessions_id)
+      REFERENCES sessions (id),
+  note INT CHECK((note >= 0) AND (note <= 100)),
+  reussite BOOL
+);
+```
+-----
+
+
 # Atelier 2 - BD, schéma et rôles
 
 ## Numéro 1
